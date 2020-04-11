@@ -26,6 +26,7 @@ rmarkdown::render(
     output_options = list(     
         toc       = TRUE,
         toc_float = FALSE,
+        toc_depth = 2,
         code_folding = 'show',
         theme        = 'lumen',
         number_sections = TRUE
