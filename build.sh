@@ -30,7 +30,8 @@ rmarkdown::render(
         theme        = 'lumen',
         number_sections = TRUE
         ),
-  output_dir = \"$DEST\"
+  output_dir  = \"$DEST\",
+  output_file = 'index.html'
 );
 
 0; # return 0 when worked until the end.
