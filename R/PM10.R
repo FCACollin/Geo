@@ -26,7 +26,7 @@ paths <- list(
   f01 = file.path(
     'extdep', 'gisco', 'ref-nuts-2016-60m', 'NUTS_RG_60M_2016_3035'
     ),
-  f02 = file.path(getwd(), "output", "html", "html_widget", "PM10_map.html")
+  f02 = file.path(getwd(), "docs", "html", "html_widget", "PM10_map.html")
 );
 
 
