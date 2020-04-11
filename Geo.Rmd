@@ -3,13 +3,6 @@ title: "API + Maps: Spatial Interpolation"
 author: "FCA Collin, Ph.D - <https://FCACollin.github.io/Latarnia>"
 date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
 bibliography: ref/reference/bibtex/ref.bib
-output_format:
-    html_document:
-        toc: TRUE
-        toc_float: FALSE
-        code_folding: 'show'
-        theme: 'lumen'
-        number_sections: TRUE
 
 ---
 
@@ -100,7 +93,7 @@ Packages
 --------
 
 - The API queries were managed with `httr` [@Wickham2019]
-  and `jsonlite` [@Ooms2014].
+  and `jsonlite` [@Ooms2014] and `geojsonio` [@Chamberlain2020].
 - The geographic data were handled with `sp` [@Pebesma2005;@Bivand2013],
   `rgdal` [@Bivand2019], `raster` [@Hijmans2020] and `gstat` [@Graeler2016].
 - The interactive rendering was managed with `leaflet` and `htmlwidgets`.
@@ -146,16 +139,33 @@ Finally, measures are extracted for a selected air quality parameter,
 GIS objects
 -----------
 
-The shape file was previously downloaded[^1], loaded into the session and
-restricted to the voivodeships (second administrative division) in
-Poland. The shape Coordinate Reference System was transformed in
-the World Geodetic System 1984 (WGS84)
+### Shape {.tabset}
 
-```{r data_geo_shape_pl}
+The shape data were downloaded querying the GISCO API. Eventually, the
+shape file could be downloaded[^1] and then loaded into the session. The
+Shape is then restricted to the voivodeships (second administrative division) in
+Poland. The shape Coordinate Reference System was transformed in
+the World Geodetic System 1984 (WGS84).
+
+
+#### Via API Query
+
+```{r data_api_geo_shape_pl}
 ```
 
 ```{r map_geo_shape_pl, fig.cap="Poland shape file."}
 ```
+
+
+#### Via downloaded files
+
+```{r data_geo_shape_pl, eval = FALSE}
+```
+
+```{r map_geo_shape_pl, fig.cap="Poland shape file."}
+```
+
+### Points
 
 The PM10 data prepared earlier were restricted to the latest
 date and time with recorded by a sufficient number of station.
@@ -175,6 +185,8 @@ raster and pixels. The value of each pixel was
 estimated as the average of the local value falling in the area covered by that
 pixel.
 
+
+### Raster
 
 ```{r data_gis_raster}
 ```

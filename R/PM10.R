@@ -129,6 +129,21 @@ gis_sh <- subset(     gis_sh, CNTR_CODE == "PL" & LEVL_CODE == 2);
 gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
 
 
+## @knitr data_api_geo_shape_pl ------------------------------------------------
+
+gis_sh <- geojsonio::geojson_read(
+  file.path(
+    "https://ec.europa.eu/eurostat/cache",
+    "GISCO/distribution/v2/nuts/geojson",
+    "NUTS_RG_60M_2016_3035_LEVL_2.geojson"
+    ),
+  what = "sp"
+  );
+gis_sh <- subset(gis_sh, CNTR_CODE == "PL");
+gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
+
+
+
 ## @knitr map_geo_shape_pl ----------------------------------------------------
 sp::plot(gis_sh);
 
@@ -167,6 +182,7 @@ gis_pts <- sp::SpatialPointsDataFrame(
 
 sp::plot(gis_sh);
 sp::plot(gis_pts, add = TRUE);
+
 
 ## @knitr data_gis_raster ------------------------------------------------------
 
