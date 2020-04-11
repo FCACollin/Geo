@@ -1,0 +1,253 @@
+---
+title: "API + Maps: Spatial Interpolation"
+author: "FCA Collin, Ph.D - <https://FCACollin.github.io/Latarnia>"
+date: "`r format(Sys.Date(), '%A, %B %d, %Y')`"
+bibliography: ref/reference/bibtex/ref.bib
+output_format:
+    html_document:
+        toc: TRUE
+        toc_float: FALSE
+        code_folding: 'show'
+        theme: 'lumen'
+        number_sections: TRUE
+
+---
+
+Introduction
+============
+
+The low quality of air in Poland is responsible for the anticipated death
+of 50000 people every year. Not only fatalities, life comfort of inhabitants
+is impacted with smog triggering chronicle respiratory
+difficulties, nauseas or headaches. Fight against smog encompasses a large range
+of action supported by public funds, from promotion of more recent furnace to
+the local ban of coal combustions.
+
+A cornerstone of public measure lays in the ability to describe an initial
+state and monitor its evolution; it makes possible the investigation of the
+expected improvement associated with a strategy. In this
+respect, a  network of station measuring air quality across Poland provides
+hourly evaluation of various pollutant. The station data are either directly
+delivered through synthetic maps or less refined as raw data (a measure at a
+give date and time for a specific pollutant monitored by a peculiar station).
+
+Stations provide air quality estimation in a specific location and provide
+therefore a localised description of the air quality. The number of station
+changes with time, with a general trend to increase the number of stations
+available. In this condition, the stated of air quality is not available
+for the whole territory.
+
+To account for spacial discrete distribution of station, and
+variation with time of data acquisition availability the complete network
+of air quality monitoring can be interpolated so as to obtain a local estimation
+in any position within the map. This will help representing the general
+situation of air quality in Poland and also understanding the limit of the current
+air quality monitoring schemes. The approach presented hereafter is a possible
+general framework for the generation of interpolated maps along with
+prediction variance estimations.
+
+```{r setupKnitr, echo = FALSE, message = FALSE, warning = FALSE}
+#[FC 191010 08:15]# {{{
+
+fig.height <- 5;
+fig.width <- 16/9 * fig.height;
+knitr::opts_chunk$set(
+  warning    = FALSE,
+  message    = FALSE,
+  echo       = TRUE,
+  results    = 'hide',
+  cache      = FALSE,
+  fig.width  = fig.width,
+  fig.height = fig.height,
+  dpi        = 300,
+  dev.args = list(bg = 'transparent'),
+  dev = c('png', 'pdf')
+  );
+
+knitr::read_chunk("R/PM10.R")
+
+###}}} -- vim fold
+```
+
+
+Material and methods
+====================
+
+Principle
+---------
+
+The general idea is to retrieve and select air quality data from station
+scattered across the country and represent them on a map. The stations
+represent singular points, the scattered values are used for interpolation
+so as to estimated the air quality over all territory in a *raster*.
+The raster, the country boundaries (*shape*), the station measure (points)
+are then stacked over an open street map background.
+
+
+Data
+----
+
+Updated PM10 data are available via an API interface:
+<https://powietrze.gios.gov.pl/pjp/content/api>.
+
+The map shape was downloaded from the 
+Geographic Information System of the COmmission (GISCO), a service
+within Eurostats. The GISCO proposes a nomenclature of territorial units for
+Statistics, named NUTS. The NUTS of the year 2016 was downloaded before running
+the application[^1].
+
+Packages
+--------
+
+- The API queries were managed with `httr` [@Wickham2019]
+  and `jsonlite` [@Ooms2014].
+- The geographic data were handled with `sp` [@Pebesma2005;@Bivand2013],
+  `rgdal` [@Bivand2019], `raster` [@Hijmans2020] and `gstat` [@Graeler2016].
+- The interactive rendering was managed with `leaflet` and `htmlwidgets`.
+
+
+```{r settings}
+```
+
+
+Results
+=======
+
+
+PM10 data
+---------
+
+The API interface was used to query the list of available stations.
+
+```{r data_station}
+```
+
+```{r table_station, results = 'asis', echo = FALSE}
+```
+
+Then, for every station, the list of sensors were stacked in a table.
+
+```{r data_sensor}
+```
+
+```{r table_sensor, results = 'asis', echo = FALSE}
+```
+
+Finally, measures are extracted for a selected air quality parameter,
+(e.g. PM10).
+
+```{r data_measure}
+```
+
+```{r table_measure, results = 'asis', echo = FALSE}
+```
+
+
+GIS objects
+-----------
+
+The shape file was previously downloaded[^1], loaded into the session and
+restricted to the voivodeships (second administrative division) in
+Poland. The shape Coordinate Reference System was transformed in
+the World Geodetic System 1984 (WGS84)
+
+```{r data_geo_shape_pl}
+```
+
+```{r map_geo_shape_pl, fig.cap="Poland shape file."}
+```
+
+The PM10 data prepared earlier were restricted to the latest
+date and time with recorded by a sufficient number of station.
+The points were then added to the available shape previously obtained.
+
+```{r data_geo_points}
+```
+
+```{r map_geo_points, fig.cap="Addition of station location to the shape file."}
+```
+
+Density of points was heterogeneous, while some area were poorly monitored,
+some other area cumulated locally many stations.
+The map was then divided into a grid composed of 300 rows and 300 columns,
+defining therefore 90000 squares; the grid and squares, are later referred as
+raster and pixels. The value of each pixel was
+estimated as the average of the local value falling in the area covered by that
+pixel.
+
+
+```{r data_gis_raster}
+```
+
+```{r graph_gis_raster, fig.cap="From station to pixel value estimation."}
+```
+
+A linear interpolation was computed to fill the raster gap.
+
+```{r data_gis_raster_intpl}
+```
+
+```{r graph_gis_raster_intpl, fig.cap="Linear interpolation of local PM10 measures."}
+```
+
+Eventually, zone contour were delimited and a more appropriate colour scale
+was proposed.
+
+```{r graph_gis_raster_intpl_2, fig.cap="Automatic detection of contours."}
+```
+
+
+Interactive map
+---------------
+
+Finally, the raster, the shape and the point were overlayed on a Open Street
+Map background. The `leaflet` package proposes a convenient high-level graphical
+programming interface were layers are added to each other. Note that a
+colour scale was refined so as to correspond to Polish standards for which
+a green-to-red gradient is limited to PM10 concentrations between 0 and 150.
+
+
+```{r data_map_leaflet}
+```
+
+<iframe
+src="html/html_widget/PM10_map.html" width="100%" height="600" frameborder="0"
+style="border:0;" allowfullscreen=""></iframe>
+
+<a href="html/html_widget/PM10_map.html" target="_blank">Open in a new tab.</a>
+
+
+Session information
+-------------------
+
+```{r sessionInfo, echo = FALSE, results = "markup"}
+sessionInfo()
+```
+
+
+Discussion
+==========
+
+The Polish GOŚ API is a easy-to-use interface to query the recent measure
+accounting for air quality at a national scale. The projection of this
+this information to a map layer and linear interpolation is rather
+straightforward. The high-level function leaflet is of particular interest
+to combine the different map layers into a fashionable interactive map
+easily integrated into a web page as a html widget.
+
+If the map can be updated, the information projected is nonetheless static.
+It could be of interest to add a reactive component such as proposed by the
+`Shiny` package so as to be able to choose a possible date.
+What is more, an animation cycling through available measure date and time
+would help perceiving the temporal trend.
+
+
+
+References
+==========
+
+
+[^1]: <https://ec.europa.eu/eurostat/cache/GISCO/distribution/v1/nuts-2016.html>
+
+[modeline]: # ( vim: set foldlevel=0 spell spelllang=en_gb: )
+
