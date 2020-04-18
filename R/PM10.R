@@ -26,9 +26,15 @@ paths <- list(
   f01 = file.path(
     'extdep', 'gisco', 'ref-nuts-2016-60m', 'NUTS_RG_60M_2016_3035'
     ),
-  f02 = file.path(getwd(), "docs", "html", "html_widget", "PM10_map.html")
+  f02 = file.path(getwd(), "docs", "html", "html_widget", "PM10_map.html"),
+  f03 = file.path("data", "station.rda"),
+  f04 = file.path("data", "sensor.rda"),
+  f05 = file.path("data", "measure.rda"),
+  f06 = file.path("data", "shape.rda")
 );
 
+write_ref <- c(TRUE, FALSE)[2];
+use_ref   <- c(TRUE, FALSE)[1]
 
 ## @knitr data_station ---------------------------------------------------------
 
@@ -38,6 +44,15 @@ response <- httr::content(request, as = "text", encoding = "UTF-8");
 station  <- jsonlite::fromJSON(response, flatten = TRUE);
 
 head(station)
+
+
+## @knitr retrieve_data_station ------------------------------------------------
+
+if(write_ref) {
+  save(station, file = paths$f03)
+} else if(use_ref){
+  load(paths$f03, verbose = TRUE);
+} else {}
 
 
 ## @knitr table_station --------------------------------------------------------
@@ -53,6 +68,7 @@ DT::datatable(
     ),
   rownames = FALSE
   );
+
 
 ## @knitr data_sensor ----------------------------------------------------------
 
@@ -72,6 +88,15 @@ sensor <- lapply(
 sensor <- do.call(sensor, what = rbind);
 
 head(sensor);
+
+
+## @knitr retrieve_data_sensor -------------------------------------------------
+
+if(write_ref) {
+  save(sensor, file = paths$f04)
+} else if(use_ref) {
+  load(paths$f04, verbose = TRUE);
+} else {}
 
 
 ## @knitr table_sensor ---------------------------------------------------------
@@ -104,9 +129,19 @@ measure <- lapply(
 measure <- do.call(rbind, measure);
 
 head(measure)
+
 date_range <- range(
   strptime(unique(measure$date), format = "%Y-%m-%d %H:%M:%S")
   );
+
+
+## @knitr retrieve_data_measure -------------------------------------------------
+
+if(write_ref) {
+  save(measure, date_range, file = paths$f05)
+} else if(use_ref) {
+  load(paths$f05, verbose = TRUE);
+} else {}
 
 
 ## @knitr table_measure --------------------------------------------------------
@@ -127,6 +162,15 @@ DT::datatable(
 gis_sh <- rgdal::readOGR(dsn = paths$f01, layer = "NUTS_RG_60M_2016_3035");
 gis_sh <- subset(     gis_sh, CNTR_CODE == "PL" & LEVL_CODE == 2);
 gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
+
+
+## @knitr retrieve_data_gis -------------------------------------------------
+
+if(write_ref) {
+  save(gis_sh, file = paths$f06)
+} else if (use_ref){
+  load(paths$f06, verbose = TRUE);
+} else {}
 
 
 ## @knitr data_api_geo_shape_pl ------------------------------------------------
@@ -154,9 +198,9 @@ sel_date <- with(measure, table(date[!is.na(value)]));
 sel_date <- sel_date[order(names(sel_date))];
 sel_date <- sel_date[sel_date >= quantile(sel_date, probs = 0.85)];
 sel_date <- names(rev(sel_date))[1];
+if(use_ref) { sel_date <- "2020-04-16 14:00:00" }
 
 gis_pts <- subset(measure, date == sel_date);
-# gis_pts <- subset(measure, date == "2020-03-31 07:00:00");
 gis_pts <- subset(gis_pts, !(is.na(value)));
 gis_pts <- merge(
   x = station, by.x = "id",
@@ -230,6 +274,7 @@ sp::plot(
 sp::plot(gis_sh, add = TRUE, border = 'gray75');
 sp::plot(gis_pts, add = TRUE, col = 'blue');
 sp::plot(raster::rasterToContour(gis_raster_intpl), add = TRUE)
+
 
 ## @knitr data_map_leaflet -----------------------------------------------------
 
