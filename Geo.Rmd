@@ -115,12 +115,18 @@ The API interface was used to query the list of available stations.
 ```{r data_station}
 ```
 
+```{r retrieve_data_station}
+```
+
 ```{r table_station, results = 'asis', echo = FALSE}
 ```
 
 Then, for every station, the list of sensors were stacked in a table.
 
 ```{r data_sensor}
+```
+
+```{r retrieve_data_sensor}
 ```
 
 ```{r table_sensor, results = 'asis', echo = FALSE}
@@ -130,6 +136,9 @@ Finally, measures are extracted for a selected air quality parameter,
 (e.g. PM10).
 
 ```{r data_measure}
+```
+
+```{r retrieve_data_measure}
 ```
 
 ```{r table_measure, results = 'asis', echo = FALSE}
@@ -153,6 +162,9 @@ the World Geodetic System 1984 (WGS84).
 ```{r data_api_geo_shape_pl}
 ```
 
+```{r retrieve_data_gis}
+```
+
 ```{r map_geo_shape_pl, fig.cap="Poland shape file."}
 ```
 
@@ -160,6 +172,9 @@ the World Geodetic System 1984 (WGS84).
 #### Via downloaded files
 
 ```{r data_geo_shape_pl, eval = FALSE}
+```
+
+```{r retrieve_data_gis}
 ```
 
 ```{r map_geo_shape_pl, fig.cap="Poland shape file."}
@@ -227,6 +242,15 @@ src="html/html_widget/PM10_map.html" width="100%" height="600" frameborder="0"
 style="border:0;" allowfullscreen=""></iframe>
 
 <a href="html/html_widget/PM10_map.html" target="_blank">Open in a new tab.</a>
+
+
+
+```{r map_gif, eval = TRUE, results = "hide"}
+```
+
+![The rasters were stacked in an animated gif.](
+img/movie.gif
+)
 
 
 Session information

@@ -34,7 +34,7 @@ paths <- list(
 );
 
 write_ref <- c(TRUE, FALSE)[2];
-use_ref   <- c(TRUE, FALSE)[1]
+use_ref   <- c(TRUE, FALSE)[1];
 
 ## @knitr data_station ---------------------------------------------------------
 
@@ -164,15 +164,6 @@ gis_sh <- subset(     gis_sh, CNTR_CODE == "PL" & LEVL_CODE == 2);
 gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
 
 
-## @knitr retrieve_data_gis -------------------------------------------------
-
-if(write_ref) {
-  save(gis_sh, file = paths$f06)
-} else if (use_ref){
-  load(paths$f06, verbose = TRUE);
-} else {}
-
-
 ## @knitr data_api_geo_shape_pl ------------------------------------------------
 
 gis_sh <- geojsonio::geojson_read(
@@ -186,6 +177,14 @@ gis_sh <- geojsonio::geojson_read(
 gis_sh <- subset(gis_sh, CNTR_CODE == "PL");
 gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
 
+
+## @knitr retrieve_data_gis -------------------------------------------------
+
+if(write_ref) {
+  save(gis_sh, file = paths$f06)
+} else if (use_ref){
+  load(paths$f06, verbose = TRUE);
+} else {}
 
 
 ## @knitr map_geo_shape_pl ----------------------------------------------------
@@ -336,6 +335,90 @@ m <- leaflet::addControl(
 
 htmlwidgets::saveWidget(m, file = paths$f02);
 # m;
+
+
+## @knitr map_gif --------------------------------------------------------------
+
+X <- unique(measure$date);
+names(X) <- X;
+test <- lapply(
+  X = X,
+  FUN = function(x){
+
+    print(x)
+    gis_pts <- subset(measure, date == x);
+    gis_pts <- subset(gis_pts, !(is.na(value)));
+    gis_pts <- merge(
+      x = station, by.x = "id",
+      y = gis_pts, by.y = "stationId"
+      );
+
+    gis_pts <- within(
+      gis_pts,
+      {
+        lon <- as.numeric(gegrLon);
+        lat <- as.numeric(gegrLat);
+      }
+      );
+
+    gis_pts <- sp::SpatialPointsDataFrame(
+      coords = gis_pts[c('lon', 'lat')],
+      data   = gis_pts,
+      proj4string = sp::CRS("+proj=longlat +datum=WGS84")
+      );
+
+    gis_grid <- raster::raster(
+      ncols=50, nrows=50,
+      ext = extent(gis_sh),
+      crs = sp::CRS("+proj=longlat +datum=WGS84")
+      ); 
+    gis_raster <- raster::rasterize(
+      x = gis_pts, field = "value", fun = mean,
+      y = gis_grid
+      );
+
+    gis_mod <- gstat::gstat(id = "PM10", formula = value~1, data = gis_pts);
+
+    gis_raster_intpl <- raster::interpolate(gis_raster , gis_mod);
+    gis_raster_intpl <- raster::crop(gis_raster_intpl, raster::extent(gis_sh));
+    gis_raster_intpl <- raster::mask(gis_raster_intpl, gis_sh);
+    mymax <- 150;
+    gis_raster_intpl[gis_raster_intpl >= mymax] <- mymax-1;
+
+
+    return(gis_raster_intpl);
+  }
+)
+
+test <- test[order(names(test))];
+pngdir <- tempdir()
+paths <- file.path(pngdir, paste0("raster", names(test), '.png'));
+export <- function(layer, path, main){
+  png(path);
+  plot(layer,
+    zlim = c(0, 150), main = main,
+   useRaster = TRUE, interpolate = TRUE,
+   col = colorRampPalette(c("green", "orange", "red4"))(15)
+   );
+  sp::plot(gis_sh, add = TRUE, border = 'gray75');
+  sp::plot(raster::rasterToContour(layer), add = TRUE,
+  col = 'gray35')
+  dev.off();
+}
+
+Map(export, test, paths, names(test))
+system(
+  paste0(
+  "convert -delay 20 ", pngdir, "/ra*.png docs/img/movie.gif"
+  )
+  );
+
+
+# animate(
+#   stack(rev(test)), col = colorRampPalette(c("green", "orange", "red4"))(20),
+#   pause=.05, n = 1
+# )
+
 
 
 ## @knitr END ------------------------------------------------------------------
