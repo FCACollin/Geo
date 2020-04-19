@@ -36,6 +36,7 @@ paths <- list(
 write_ref <- c(TRUE, FALSE)[2];
 use_ref   <- c(TRUE, FALSE)[1];
 
+
 ## @knitr data_station ---------------------------------------------------------
 
 path     <- "http://api.gios.gov.pl/pjp-api/rest/station/findAll";
@@ -161,7 +162,8 @@ DT::datatable(
 
 gis_sh <- rgdal::readOGR(dsn = paths$f01, layer = "NUTS_RG_60M_2016_3035");
 gis_sh <- subset(     gis_sh, CNTR_CODE == "PL" & LEVL_CODE == 2);
-gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
+# Conversion to ETRS89 Poland CS92
+gis_sh <- sp::spTransform(gis_sh, sp::CRS("+init=epsg:2180"));
 
 
 ## @knitr data_api_geo_shape_pl ------------------------------------------------
@@ -175,7 +177,8 @@ gis_sh <- geojsonio::geojson_read(
   what = "sp"
   );
 gis_sh <- subset(gis_sh, CNTR_CODE == "PL");
-gis_sh <- sp::spTransform(gis_sh, sp::CRS("+proj=longlat +datum=WGS84"));
+# Conversion to ETRS89 Poland CS92 (EPSG 2180)
+gis_sh <- sp::spTransform(gis_sh, sp::CRS("+init=epsg:2180"));
 
 
 ## @knitr retrieve_data_gis -------------------------------------------------
@@ -191,6 +194,27 @@ if(write_ref) {
 sp::plot(gis_sh);
 
 
+## @knitr graph_data_avail -----------------------------------------------------
+
+library(ggplot2);
+dtaplot <- aggregate(
+    value ~ date + param.paramCode,
+    data = subset(measure, !is.na(value)),
+    FUN = length
+    )
+ggplot(
+  data = dtaplot,
+  mapping = aes(y = value, x = date)
+  ) + geom_point(
+  ) + coord_cartesian(
+  ylim = range(c(dtaplot$value, 0))
+  ) + geom_hline(
+  yintercept = quantile(dtaplot$value, probs = 0.85)
+  ) + theme(
+  axis.text.x=element_text(angle = 45, hjust = 1),
+  );
+
+
 ## @knitr data_geo_points ------------------------------------------------------
 
 sel_date <- with(measure, table(date[!is.na(value)]));
@@ -199,26 +223,37 @@ sel_date <- sel_date[sel_date >= quantile(sel_date, probs = 0.85)];
 sel_date <- names(rev(sel_date))[1];
 if(use_ref) { sel_date <- "2020-04-16 14:00:00" }
 
-gis_pts <- subset(measure, date == sel_date);
-gis_pts <- subset(gis_pts, !(is.na(value)));
-gis_pts <- merge(
-  x = station, by.x = "id",
-  y = gis_pts, by.y = "stationId"
-  );
+fetch_pts <- function(
+  datetime,
+  measure = measure, station = station
+  ){
 
-gis_pts <- within(
-  gis_pts,
-  {
-    lon <- as.numeric(gegrLon);
-    lat <- as.numeric(gegrLat);
-  }
-  );
+  gis_pts <- subset(measure, date == datetime);
+  gis_pts <- subset(gis_pts, !(is.na(value)));
+  gis_pts <- merge(
+    x = station, by.x = "id",
+    y = gis_pts, by.y = "stationId"
+    );
 
-gis_pts <- sp::SpatialPointsDataFrame(
-  coords = gis_pts[c('lon', 'lat')],
-  data   = gis_pts,
-  proj4string = sp::CRS("+proj=longlat +datum=WGS84")
-  );
+  gis_pts <- within(
+    gis_pts,
+    {
+      lon <- as.numeric(gegrLon);
+      lat <- as.numeric(gegrLat);
+    }
+    );
+
+  gis_pts <- sp::SpatialPointsDataFrame(
+    coords = gis_pts[c('lon', 'lat')], data = gis_pts,
+    proj4string = sp::CRS("+init=epsg:4326")
+    );
+  gis_pts <- sp::spTransform(gis_pts, sp::CRS("+init=epsg:2180"));
+
+  return(gis_pts);
+
+}
+
+gis_pts <- fetch_pts(datetime = sel_date, measure = measure, station = station);
 
 
 ## @knitr map_geo_points ------------------------------------------------------
@@ -229,13 +264,12 @@ sp::plot(gis_pts, add = TRUE);
 
 ## @knitr data_gis_raster ------------------------------------------------------
 
+# I have sample points in Poland, I want an estimation in every point in Poland.
 gis_grid <- raster::raster(
-    ncols=300, nrows=300,
-    #     xmn = min(gis_pts$lon) - 10, xmx = max(gis_pts$lon) + 10,
-    #     ymn = min(gis_pts$lat) - 10, ymx = max(gis_pts$lat) + 10,
-    ext = extent(gis_sh),
-    crs = sp::CRS("+proj=longlat +datum=WGS84")
+    ncols=300, nrows=300, ext = extent(gis_sh),
+    crs = sp::proj4string(gis_sh)
     ); 
+
 gis_raster <- raster::rasterize(
   x = gis_pts, field = "value", fun = mean,
   y = gis_grid
@@ -265,10 +299,38 @@ sp::plot(gis_sh, add= TRUE);
 sp::plot(gis_pts, add = TRUE, pch = 1);
 
 
+## @knitr function_interpolate_raster ------------------------------------------
+
+interpolate_raster <- function(gis_sh = gis_sh, gis_pts = gis_pts){
+
+  gis_grid <- raster::raster(
+    ncols=300, nrows=300, ext = extent(gis_sh),
+    crs = sp::proj4string(gis_sh)
+    ); 
+
+  gis_raster <- raster::rasterize(
+    x = gis_pts, field = "value", fun = mean,
+    y = gis_grid
+    );
+
+  gis_mod <- gstat::gstat(id = "PM10", formula = value~1, data = gis_pts);
+
+  gis_raster_intpl <- raster::interpolate(gis_raster , gis_mod);
+  gis_raster_intpl <- raster::crop(gis_raster_intpl, raster::extent(gis_sh));
+  gis_raster_intpl <- raster::mask(gis_raster_intpl, gis_sh);
+
+  return(gis_raster_intpl);
+
+}
+
+gis_raster_intpl <- interpolate_raster(gis_sh = gis_sh, gis_pts = gis_pts)
+
+
 ## @knitr graph_gis_raster_intpl_2 ---------------------------------------------
 
 sp::plot(
-  gis_raster_intpl, col = colorRampPalette(c("green", "orange", "red4"))(15)
+  gis_raster_intpl, col = colorRampPalette(c("green", "orange", "red4"))(15),
+  useRaster = TRUE, interpolate = TRUE,
   ); 
 sp::plot(gis_sh, add = TRUE, border = 'gray75');
 sp::plot(gis_pts, add = TRUE, col = 'blue');
@@ -279,6 +341,13 @@ sp::plot(raster::rasterToContour(gis_raster_intpl), add = TRUE)
 
 mymax <- 150;
 gis_raster_intpl[gis_raster_intpl >= mymax] <- mymax-1;
+
+# Conversion of the objects into CRS WGS84 (epsg 4326)
+gis_sh  <- sp::spTransform(gis_sh, sp::CRS("+init=epsg:4326"));
+gis_pts <- sp::spTransform(gis_pts, sp::CRS("+init=epsg:4326"));
+gis_raster_intpl <- projectRaster(
+  gis_raster_intpl, crs = sp::CRS("+init=epsg:4326")
+);
 
 pal  <- leaflet::colorNumeric(
   colorRampPalette(c("green", "orange", "red4"))(15),
@@ -339,83 +408,50 @@ htmlwidgets::saveWidget(m, file = paths$f02);
 
 ## @knitr map_gif --------------------------------------------------------------
 
-X <- unique(measure$date);
-names(X) <- X;
-test <- lapply(
-  X = X,
+gis_sh  <- sp::spTransform(gis_sh, sp::CRS("+init=epsg:2180"));
+
+datetimes        <- unique(measure$date);
+names(datetimes) <- datetimes;
+
+raster_gif <- lapply(
+  X   = datetimes,
   FUN = function(x){
 
     print(x)
-    gis_pts <- subset(measure, date == x);
-    gis_pts <- subset(gis_pts, !(is.na(value)));
-    gis_pts <- merge(
-      x = station, by.x = "id",
-      y = gis_pts, by.y = "stationId"
-      );
+    gis_pts <- fetch_pts(datetime = x, measure = measure, station = station);
+    gis_raster_intpl <- interpolate_raster(gis_sh = gis_sh, gis_pts = gis_pts);
 
-    gis_pts <- within(
-      gis_pts,
-      {
-        lon <- as.numeric(gegrLon);
-        lat <- as.numeric(gegrLat);
-      }
-      );
-
-    gis_pts <- sp::SpatialPointsDataFrame(
-      coords = gis_pts[c('lon', 'lat')],
-      data   = gis_pts,
-      proj4string = sp::CRS("+proj=longlat +datum=WGS84")
-      );
-
-    gis_grid <- raster::raster(
-      ncols=50, nrows=50,
-      ext = extent(gis_sh),
-      crs = sp::CRS("+proj=longlat +datum=WGS84")
-      ); 
-    gis_raster <- raster::rasterize(
-      x = gis_pts, field = "value", fun = mean,
-      y = gis_grid
-      );
-
-    gis_mod <- gstat::gstat(id = "PM10", formula = value~1, data = gis_pts);
-
-    gis_raster_intpl <- raster::interpolate(gis_raster , gis_mod);
-    gis_raster_intpl <- raster::crop(gis_raster_intpl, raster::extent(gis_sh));
-    gis_raster_intpl <- raster::mask(gis_raster_intpl, gis_sh);
     mymax <- 150;
-    gis_raster_intpl[gis_raster_intpl >= mymax] <- mymax-1;
-
+    gis_raster_intpl[gis_raster_intpl > mymax] <- mymax;
 
     return(gis_raster_intpl);
   }
-)
+);
 
-test <- test[order(names(test))];
-pngdir <- tempdir()
-paths <- file.path(pngdir, paste0("raster", names(test), '.png'));
+raster_gif <- raster_gif[order(names(raster_gif))];
+pngdir     <- tempdir()
+paths_png  <- file.path(pngdir, paste0("raster", names(raster_gif), '.png'));
+
 export <- function(layer, path, main){
+
   png(path);
-  plot(layer,
-    zlim = c(0, 150), main = main,
-   useRaster = TRUE, interpolate = TRUE,
-   col = colorRampPalette(c("green", "orange", "red4"))(15)
-   );
+  plot(
+    layer, zlim = c(0, 150), main = main, useRaster = TRUE, interpolate = TRUE,
+    col = colorRampPalette(c("green", "orange", "red4"))(15)
+    );
   sp::plot(gis_sh, add = TRUE, border = 'gray75');
-  sp::plot(raster::rasterToContour(layer), add = TRUE,
-  col = 'gray35')
+  sp::plot(raster::rasterToContour(layer), add = TRUE, col = 'gray35')
   dev.off();
+
 }
 
-Map(export, test, paths, names(test))
-system(
-  paste0(
-  "convert -delay 20 ", pngdir, "/ra*.png docs/img/movie.gif"
-  )
-  );
-
+# <http://adv-r.had.co.nz/Functionals.html>
+Map(export, raster_gif, paths_png, names(raster_gif));
+system(paste0("convert -delay 40 ", pngdir, "/ra*.png docs/img/movie.gif"));
 
 # animate(
-#   stack(rev(test)), col = colorRampPalette(c("green", "orange", "red4"))(20),
+#   stack(rev(raster_gif)),
+#   col = colorRampPalette(c("green", "orange", "red4"))(20),
 #   pause=.05, n = 1
 # )
 
